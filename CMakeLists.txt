@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.16)
 project(OffscreenRenderer)
 
 # CMP0063: Honor visibility properties for all target types.
