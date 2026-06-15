@@ -16,28 +16,56 @@
 #include <OpenGL/CGLTypes.h>
 #include <OpenGL/CGLCurrent.h>
 #include <OpenGL/OpenGL.h>
+#include <sstream>
+#include <vector>
 #include "GLErrors.hh"
 
 struct CGLWrapper : public OpenGLContext {
     CGLWrapper(int width, int height, GLenum /* format */ = GL_RGBA,
                GLint depthBits = 24, GLint stencilBits = 0, GLint accumBits = 0)
     {
-        // Initialize CGL
-        CGLPixelFormatAttribute pixAttributes[12] = {
-            kCGLPFAAccelerated,   // Presence of boolean flags implies `true` value according to documentation
-            kCGLPFAOpenGLProfile, CGLPixelFormatAttribute(kCGLOGLPVersion_3_2_Core), // Uses latest available version (not actually 3.2!!)
-            kCGLPFADepthSize,     CGLPixelFormatAttribute(depthBits),
-            kCGLPFAAlphaSize,     CGLPixelFormatAttribute(8),
-            kCGLPFAStencilSize,   CGLPixelFormatAttribute(stencilBits),
-            kCGLPFAAccumSize,     CGLPixelFormatAttribute(accumBits),
-            CGLPixelFormatAttribute(0)
-        };
-
         {
-            CGLPixelFormatObj pix;
-            GLint num;
-            CGLError errorCode = CGLChoosePixelFormat(pixAttributes, &pix, &num);
-            if (errorCode != kCGLNoError) throw std::runtime_error("CGLChoosePixelFormat failure");
+            auto makeAttributes = [&](bool accelerated, bool coreProfile) {
+                std::vector<CGLPixelFormatAttribute> attrs;
+                if (accelerated) attrs.push_back(kCGLPFAAccelerated);
+                if (coreProfile) {
+                    attrs.push_back(kCGLPFAOpenGLProfile);
+                    attrs.push_back(CGLPixelFormatAttribute(kCGLOGLPVersion_3_2_Core));
+                }
+                attrs.push_back(kCGLPFADepthSize);
+                attrs.push_back(CGLPixelFormatAttribute(depthBits));
+                attrs.push_back(kCGLPFAAlphaSize);
+                attrs.push_back(CGLPixelFormatAttribute(8));
+                if (stencilBits > 0) {
+                    attrs.push_back(kCGLPFAStencilSize);
+                    attrs.push_back(CGLPixelFormatAttribute(stencilBits));
+                }
+                if (accumBits > 0) {
+                    attrs.push_back(kCGLPFAAccumSize);
+                    attrs.push_back(CGLPixelFormatAttribute(accumBits));
+                }
+                attrs.push_back(CGLPixelFormatAttribute(0));
+                return attrs;
+            };
+
+            CGLPixelFormatObj pix = nullptr;
+            GLint num = 0;
+            CGLError errorCode = kCGLBadAttribute;
+            for (auto params : {std::make_pair(true,  true),
+                                std::make_pair(false, true),
+                                std::make_pair(true,  false),
+                                std::make_pair(false, false)}) {
+                auto attrs = makeAttributes(params.first, params.second);
+                errorCode = CGLChoosePixelFormat(attrs.data(), &pix, &num);
+                if ((errorCode == kCGLNoError) && (pix != nullptr) && (num > 0)) break;
+            }
+            if ((errorCode != kCGLNoError) || (pix == nullptr)) {
+                std::ostringstream msg;
+                msg << "CGLChoosePixelFormat failure";
+                if (const char *errStr = CGLErrorString(errorCode))
+                    msg << ": " << errStr;
+                throw std::runtime_error(msg.str());
+            }
 
             errorCode = CGLCreateContext(pix, NULL, &m_ctx);
             if (errorCode != kCGLNoError) throw std::runtime_error("CGLCreateContext failure");

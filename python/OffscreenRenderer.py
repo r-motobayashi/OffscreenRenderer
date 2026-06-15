@@ -75,6 +75,12 @@ def decodeColor(c):
 def normalize(v):
     return v / np.linalg.norm(v)
 
+def _float32_rows(a):
+    return np.ascontiguousarray(a, dtype=np.float32)
+
+def _uint32_rows(a):
+    return None if a is None else np.ascontiguousarray(a, dtype=np.uint32)
+
 def lookAtMatrix(position, target, up):
     viewDir = normalize(np.array(target) - np.array(position))
     right   = normalize(np.cross(viewDir, up))
@@ -126,6 +132,11 @@ class Mesh:
         (i.e., to use glDrawArrays instead of glDrawElements)
         """
         self.ctx.makeCurrent()
+        V = _float32_rows(V)
+        F = _uint32_rows(F)
+        N = _float32_rows(N)
+        if not (isinstance(color, str) or len(np.ravel(color)) in [3, 4]):
+            color = _float32_rows(color)
 
         self.numVertices = len(V)
         self._validateSizes(V, F, N, color)
@@ -171,8 +182,12 @@ class Mesh:
         Update the mesh's data without changing its connectivity.
         """
         self.ctx.makeCurrent()
+        V = _float32_rows(V)
+        N = _float32_rows(N)
 
         if (color is None): color = self.color
+        elif not (isinstance(color, str) or len(np.ravel(color)) in [3, 4]):
+            color = _float32_rows(color)
         self._validateSizes(V, None, N, color) # updates `self.constColor`
 
         color = decodeColor(color)
